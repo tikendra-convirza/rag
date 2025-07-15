@@ -8,3 +8,7 @@ wheels/
 
 # Virtual environments
 .venv
+src/data
+src/fastembed_weights/
+fastembed_weights/
+ingestion_files/
