@@ -5,8 +5,21 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "asyncpg>=0.30.0",
     "fastapi>=0.115.13",
+    "fastembed>=0.7.1",
+    "ipykernel>=6.29.5",
     "litellm>=1.72.6.post1",
     "llama-index>=0.12.42",
+    "llama-index-embeddings-fastembed>=0.3.2",
+    "llama-index-llms-openai>=0.4.7",
+    "llama-index-readers-file>=0.4.9",
+    "llama-index-readers-wikipedia>=0.3.0",
+    "llama-index-vector-stores-qdrant>=0.6.0",
+    "motor>=3.7.1",
     "pydantic>=2.11.7",
+    "python-multipart>=0.0.20",
+    "streamlit>=1.46.1",
+    "uvicorn>=0.35.0",
+    "wikipedia>=1.4.0",
 ]

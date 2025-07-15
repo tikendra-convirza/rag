@@ -1,59 +1,42 @@
-from fastapi import FastAPI, HTTPException, Request
-from pydantic import BaseModel
-import uuid
-import sqlite3
+from src.adapters.outbound.retriever_llamaindex import LlamaindexRetriever
+from src.adapters.outbound.generator_openai import OpenAIChatGenerator
+from src.adapters.outbound.store_mongo import MongoInteractionRepo
+from src.application.rag_service import RagService
+from src.adapters.inbound.ingestion import LlamaindexIngestionAdapter
+from src.adapters.inbound.rest import create_app
+from llama_index.core.indices import VectorStoreIndex
+import logging
+import sys
 import os
+from llama_index.core.extractors import (
+    TitleExtractor,
+    KeywordExtractor,
+    QuestionsAnsweredExtractor,
+)
+from llama_index.core.node_parser import SemanticSplitterNodeParser
 
-app = FastAPI()
-DB_DIR = "user_dbs"
-os.makedirs(DB_DIR, exist_ok=True)
+import qdrant_client
+from IPython.display import Markdown, display
+from llama_index.core import VectorStoreIndex, SimpleDirectoryReader
+from llama_index.core import StorageContext
+from llama_index.vector_stores.qdrant import QdrantVectorStore
+from llama_index.core.vector_stores.types import BasePydanticVectorStore
+from llama_index.embeddings.fastembed import FastEmbedEmbedding
+from llama_index.core import Settings
+from src.logger import setup_logger
 
-class IngestRequest(BaseModel):
-    data: str
+Settings.embed_model = FastEmbedEmbedding(model_name="BAAI/bge-base-en-v1.5", cache_dir='./fastembed_weights')
+logger = setup_logger(__name__)
+async def init_app():
+    logger.info("Initializing application")
+    index = VectorStoreIndex()
+    transformations=[SemanticSplitterNodeParser(embed_model=Settings.embed_model), QuestionsAnsweredExtractor()]
+    rag = RagService(
+        retriever=LlamaindexRetriever(index=index),
+        generator=OpenAIChatGenerator(),
+        ingester=LlamaindexIngestionAdapter(storage_dir='ingestion_files', transformations=transformations),
+    )
+    logger.info("Application initialized")
+    return create_app(rag)
 
-class QueryRequest(BaseModel):
-    user_id: str
-    query: str
-
-def get_db_path(user_id: str) -> str:
-    return os.path.join(DB_DIR, f"{user_id}.db")
-
-def init_user_db(user_id: str):
-    db_path = get_db_path(user_id)
-    conn = sqlite3.connect(db_path)
-    c = conn.cursor()
-    c.execute("CREATE TABLE IF NOT EXISTS records (id INTEGER PRIMARY KEY, data TEXT)")
-    conn.commit()
-    conn.close()
-
-@app.post("/ingest")
-def ingest(req: IngestRequest):
-    user_id = str(uuid.uuid4())
-    init_user_db(user_id)
-    db_path = get_db_path(user_id)
-    conn = sqlite3.connect(db_path)
-    c = conn.cursor()
-    c.execute("INSERT INTO records (data) VALUES (?)", (req.data,))
-    conn.commit()
-    conn.close()
-    return {"user_id": user_id}
-
-@app.post("/query")
-def query(req: QueryRequest):
-    db_path = get_db_path(req.user_id)
-    if not os.path.exists(db_path):
-        raise HTTPException(status_code=404, detail="User DB not found")
-    conn = sqlite3.connect(db_path)
-    c = conn.cursor()
-    # For demo, just search for data containing the query string
-    c.execute("SELECT data FROM records WHERE data LIKE ?", (f"%{req.query}%",))
-    results = [row[0] for row in c.fetchall()]
-    conn.close()
-    return {"results": results}
-
-def main():
-    print("Hello from rag!")
-
-
-if __name__ == "__main__":
-    main()
+# uvicorn main:init_app --factory
